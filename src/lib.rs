@@ -100,7 +100,7 @@ named!(operation<&str, Operation>,
 );
 named!(unitary<&str, Operation>,
     do_parse!(
-        name: call!(nom::alpha)
+        name: ident
         >> call!(sp)
         >> params: opt!(complete!(delimited!(
             terminated!(tag!("("), call!(sp)),
@@ -144,7 +144,7 @@ named_args!(register<'a>(t: &'a str)<&'a str, (String, usize)>,
     do_parse!(
         tag!(t)
         >> call!(sp)
-        >> name: call!(nom::alpha)
+        >> name: ident
         >> call!(sp)
         >> tag!(",")
         >> call!(sp)
@@ -163,7 +163,7 @@ named!(creg<&str, ClassicalRegister>, map!(call!(register, "creg"), |(name, size
 
 named!(operand<&str, (String, usize)>,
     do_parse!(
-        name: call!(nom::alpha)
+        name: ident
         >> call!(sp)
         >> tag!("[")
         >> call!(sp)
@@ -183,6 +183,7 @@ named!(comment<&str, &str>,
     ))
 );
 
+named!(ident<&str, &str>, recognize!(pair!(nom::alpha, nom::alphanumeric0)));
 named!(sp<&str, &str>, take_while!(is_whitespace));
 
 #[test]
@@ -192,6 +193,7 @@ fn test_program() {
             r#"qreg q  , 5
 creg c  , 4
 U(1.2, 3, 4.56) q[3]
+u1(3) qqq[3]
 U(7, 8, 9) quuu[2]
 CX qu[2], q[3]
 X q [ 6]
@@ -215,6 +217,7 @@ measure q [ 1 ] -> c [ 3 ]
                         vec![1.2, 3.0, 4.56],
                         Qubit("q".to_string(), 3)
                     ),
+                    Operation::Unitary("u1".to_string(), vec![3.0], Qubit("qqq".to_string(), 3)),
                     Operation::Unitary(
                         "U".to_string(),
                         vec![7.0, 8.0, 9.0],
