@@ -23,7 +23,7 @@ pub struct Bit(String, usize);
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Operation {
-    U(f64, f64, f64, Qubit),
+    Unitary(String, Vec<f64>, Qubit),
     Cx(Qubit, Qubit),
     Measure(Qubit, Bit),
 }
@@ -77,6 +77,8 @@ named!(line<&str, Option<Line>>,
         opt!(complete!(call!(sp))),
         alt_complete!(
             value!(None, comment)
+            | map!(qreg, |x| Some(Line::Qreg(x)))
+            | map!(creg, |x| Some(Line::Creg(x)))
             | do_parse!(
                 op: operation
                 >> call!(sp)
@@ -84,8 +86,6 @@ named!(line<&str, Option<Line>>,
                 >> (Some(Line::Op(op)))
             )
             | map!(operation, |x| Some(Line::Op(x)))
-            | map!(qreg, |x| Some(Line::Qreg(x)))
-            | map!(creg, |x| Some(Line::Creg(x)))
             | value!(None, nom::rest_s) // ignoring any invalid lines
         ),
         opt!(complete!(call!(sp)))
@@ -93,31 +93,26 @@ named!(line<&str, Option<Line>>,
 );
 named!(operation<&str, Operation>,
     alt_complete!(
-        unitary
-        | cx
+        cx
         | measure
+        | unitary
     )
 );
 named!(unitary<&str, Operation>,
     do_parse!(
-        tag!("U")
+        name: call!(nom::alpha)
         >> call!(sp)
-        >> tag!("(")
-        >> call!(sp)
-        >> p1: call!(nom::double_s)
-        >> call!(sp)
-        >> tag!(",")
-        >> call!(sp)
-        >> p2: call!(nom::double_s)
-        >> call!(sp)
-        >> tag!(",")
-        >> call!(sp)
-        >> p3: call!(nom::double_s)
-        >> call!(sp)
-        >> tag!(")")
+        >> params: opt!(complete!(delimited!(
+            terminated!(tag!("("), call!(sp)),
+            separated_list!(
+                terminated!(tag!(","), call!(sp)),
+                terminated!(call!(nom::double_s), call!(sp))
+            ),
+            tag!(")")
+        )))
         >> call!(sp)
         >> q: qubit
-        >> (Operation::U(p1, p2, p3, q))
+        >> (Operation::Unitary(name.to_string(), params.unwrap_or(vec![]), q))
     )
 );
 named!(cx<&str, Operation>,
@@ -199,6 +194,7 @@ creg c  , 4
 U(1.2, 3, 4.56) q[3]
 U(7, 8, 9) quuu[2]
 CX qu[2], q[3]
+X q [ 6]
 measure q [ 1 ] -> c [ 3 ]
 "#
         ),
@@ -214,9 +210,18 @@ measure q [ 1 ] -> c [ 3 ]
                     size: 4,
                 },],
                 operations: vec![
-                    Operation::U(1.2, 3.0, 4.56, Qubit("q".to_string(), 3)),
-                    Operation::U(7.0, 8.0, 9.0, Qubit("quuu".to_string(), 2)),
+                    Operation::Unitary(
+                        "U".to_string(),
+                        vec![1.2, 3.0, 4.56],
+                        Qubit("q".to_string(), 3)
+                    ),
+                    Operation::Unitary(
+                        "U".to_string(),
+                        vec![7.0, 8.0, 9.0],
+                        Qubit("quuu".to_string(), 2)
+                    ),
                     Operation::Cx(Qubit("qu".to_string(), 2), Qubit("q".to_string(), 3)),
+                    Operation::Unitary("X".to_string(), vec![], Qubit("q".to_string(), 6)),
                     Operation::Measure(Qubit("q".to_string(), 1), Bit("c".to_string(), 3)),
                 ],
             }
@@ -228,7 +233,14 @@ measure q [ 1 ] -> c [ 3 ]
 fn test_operation() {
     assert_eq!(
         operation("U(1.2, 3, 4.56)q[3]"),
-        Ok(("", Operation::U(1.2, 3.0, 4.56, Qubit("q".to_string(), 3))))
+        Ok((
+            "",
+            Operation::Unitary(
+                "U".to_string(),
+                vec![1.2, 3.0, 4.56],
+                Qubit("q".to_string(), 3)
+            )
+        ))
     );
 }
 
@@ -240,10 +252,9 @@ fn test_line() {
         line("  U(0,1,-1)q[0]"),
         Ok((
             "",
-            Some(Line::Op(Operation::U(
-                0.0,
-                1.0,
-                -1.0,
+            Some(Line::Op(Operation::Unitary(
+                "U".to_string(),
+                vec![0.0, 1.0, -1.0,],
                 Qubit("q".to_string(), 0)
             )))
         ))
@@ -252,10 +263,9 @@ fn test_line() {
         line("\tU(0,1,-1)q[100]// hoge"),
         Ok((
             "",
-            Some(Line::Op(Operation::U(
-                0.0,
-                1.0,
-                -1.0,
+            Some(Line::Op(Operation::Unitary(
+                "U".to_string(),
+                vec![0.0, 1.0, -1.0,],
                 Qubit("q".to_string(), 100)
             )))
         ))
@@ -264,10 +274,9 @@ fn test_line() {
         line(" U(0,1,-1)q[100] // hoge"),
         Ok((
             "",
-            Some(Line::Op(Operation::U(
-                0.0,
-                1.0,
-                -1.0,
+            Some(Line::Op(Operation::Unitary(
+                "U".to_string(),
+                vec![0.0, 1.0, -1.0,],
                 Qubit("q".to_string(), 100)
             )))
         ))
