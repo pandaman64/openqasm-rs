@@ -59,9 +59,9 @@ macro_rules! w (
 
 named!(program<&str, Qasm>,
     w!(do_parse!(
-        tag!("OPENQASM")
-        >> tag!("2.0")
-        >> tag!(";")
+        tag_no_case!("OPENQASM")
+        >> tag_no_case!("2.0")
+        >> tag_no_case!(";")
         >> statements: many1!(statement)
         >> (statements.into_iter()
             .fold(Qasm {
@@ -87,7 +87,7 @@ named!(statement<&str, Statement>,
             | map!(creg, Statement::Creg)
             | map!(operation, Statement::Op)
         ),
-        tag!(";")
+        tag_no_case!(";")
     ))
 );
 
@@ -102,12 +102,12 @@ named!(unitary<&str, Operation>,
     w!(do_parse!(
         name: ident
         >> params: opt!(complete!(w!(delimited!(
-            tag!("("),
+            tag_no_case!("("),
             separated_list!(
-                tag!(","),
+                tag_no_case!(","),
                 call!(nom::double_s)
             ),
-            tag!(")")
+            tag_no_case!(")")
         ))))
         >> q: qubit
         >> (Operation::Unitary(name.to_string(), params.unwrap_or(vec![]), q))
@@ -115,18 +115,18 @@ named!(unitary<&str, Operation>,
 );
 named!(cx<&str, Operation>,
     w!(do_parse!(
-        tag!("CX")
+        tag_no_case!("CX")
         >> q1: qubit
-        >> tag!(",")
+        >> tag_no_case!(",")
         >> q2: qubit
         >> (Operation::Cx(q1, q2))
     ))
 );
 named!(measure<&str, Operation>,
     w!(do_parse!(
-        tag!("measure")
+        tag_no_case!("measure")
         >> q: qubit
-        >> tag!("->")
+        >> tag_no_case!("->")
         >> c: bit
         >> (Operation::Measure(q, c))
     ))
@@ -134,11 +134,11 @@ named!(measure<&str, Operation>,
 
 named_args!(register<'a>(t: &'a str)<&'a str, (String, usize)>,
     w!(do_parse!(
-        tag!(t)
+        tag_no_case!(t)
         >> name: ident
-        >> tag!("[")
+        >> tag_no_case!("[")
         >> size: map_res!(nom::digit, FromStr::from_str)
-        >> tag!("]")
+        >> tag_no_case!("]")
         >> ((name.to_string(), size))
     ))
 );
@@ -153,8 +153,8 @@ named!(creg<&str, ClassicalRegister>, map!(call!(register, "creg"), |(name, size
 
 named!(include<&str, String>,
     w!(do_parse!(
-        tag!("include")
-        >> filename: delimited!(tag!("\""), take_until!("\""), tag!("\""))
+        tag_no_case!("include")
+        >> filename: delimited!(tag_no_case!("\""), take_until!("\""), tag_no_case!("\""))
         >> (filename.to_string())
     ))
 );
@@ -162,9 +162,9 @@ named!(include<&str, String>,
 named!(operand<&str, (String, usize)>,
     w!(do_parse!(
         name: ident
-        >> tag!("[")
+        >> tag_no_case!("[")
         >> index: map_res!(nom::digit, FromStr::from_str)
-        >> tag!("]")
+        >> tag_no_case!("]")
         >> (name.to_string(), index)
     ))
 );
@@ -173,7 +173,7 @@ named!(bit<&str, Bit>, map!(operand, |t| Bit(t.0, t.1)));
 
 named!(comment<&str, &str>,
     recognize!(preceded!(
-        tag!("//"),
+        tag_no_case!("//"),
         terminated!(
             take_until!("\n"),
             alt_complete!(eof!() | call!(nom::eol))
@@ -197,7 +197,7 @@ creg c [4 ];
 U(1.2, 3, 4.56) q[3]; 
 u1(3) qqq[3] ;
 U(7, 8, 9) quuu[2] ;
-CX qu[2], q[3];
+cx qu[2], q[3];
 X q [ 6];
 measure q [ 1 ] -> c [ 3 ];
 "#
