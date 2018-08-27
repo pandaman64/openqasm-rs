@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate nom;
+#[macro_use]
+extern crate log;
 
 use std::str::FromStr;
 
@@ -40,6 +42,7 @@ enum Statement {
     Qreg(QuantumRegister),
     Creg(ClassicalRegister),
     Op(Operation),
+    Include(String),
 }
 
 pub fn from_str<'a>(input: &str) -> nom::IResult<&str, Qasm> {
@@ -56,7 +59,10 @@ macro_rules! w (
 
 named!(program<&str, Qasm>,
     w!(do_parse!(
-        statements: many1!(statement)
+        tag!("OPENQASM")
+        >> tag!("2.0")
+        >> tag!(";")
+        >> statements: many1!(statement)
         >> (statements.into_iter()
             .fold(Qasm {
                 quantum_registers: vec![],
@@ -67,6 +73,7 @@ named!(program<&str, Qasm>,
                     Statement::Qreg(qreg) => qasm.quantum_registers.push(qreg),
                     Statement::Creg(creg) => qasm.classical_registers.push(creg),
                     Statement::Op(op) => qasm.operations.push(op),
+                    Statement::Include(_) => debug!("currently ignoring include"),
                 }
                 qasm
             }))
@@ -75,13 +82,15 @@ named!(program<&str, Qasm>,
 named!(statement<&str, Statement>,
     w!(terminated!(
         alt_complete!(
-            map!(qreg, |x| Statement::Qreg(x))
-            | map!(creg, |x| Statement::Creg(x))
-            | map!(operation, |x| Statement::Op(x))
+            map!(include, Statement::Include)
+            | map!(qreg, Statement::Qreg)
+            | map!(creg, Statement::Creg)
+            | map!(operation, Statement::Op)
         ),
         tag!(";")
     ))
 );
+
 named!(operation<&str, Operation>,
     w!(alt_complete!(
         cx
@@ -127,8 +136,9 @@ named_args!(register<'a>(t: &'a str)<&'a str, (String, usize)>,
     w!(do_parse!(
         tag!(t)
         >> name: ident
-        >> tag!(",")
+        >> tag!("[")
         >> size: map_res!(nom::digit, FromStr::from_str)
+        >> tag!("]")
         >> ((name.to_string(), size))
     ))
 );
@@ -140,6 +150,14 @@ named!(creg<&str, ClassicalRegister>, map!(call!(register, "creg"), |(name, size
     name,
     size,
 }));
+
+named!(include<&str, String>,
+    w!(do_parse!(
+        tag!("include")
+        >> filename: delimited!(tag!("\""), take_until!("\""), tag!("\""))
+        >> (filename.to_string())
+    ))
+);
 
 named!(operand<&str, (String, usize)>,
     w!(do_parse!(
@@ -170,8 +188,12 @@ named!(separator<&str, &str>, alt_complete!(comment | eat_separator!(" \t\r\n"))
 fn test_program() {
     assert_eq!(
         program(
-            r#"qreg q  , 5 ;
-creg c  , 4; 
+            r#"
+OPENQASM 2.0;
+include "qelib1.inc";
+
+qreg q[5] ;
+creg c [4 ]; 
 U(1.2, 3, 4.56) q[3]; 
 u1(3) qqq[3] ;
 U(7, 8, 9) quuu[2] ;
