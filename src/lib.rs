@@ -5,21 +5,21 @@ use std::str::FromStr;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct QuantumRegister {
-    name: String,
-    size: usize,
+    pub name: String,
+    pub size: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ClassicalRegister {
-    name: String,
-    size: usize,
+    pub name: String,
+    pub size: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-pub struct Qubit(String, usize);
+pub struct Qubit(pub String, pub usize);
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-pub struct Bit(String, usize);
+pub struct Bit(pub String, pub usize);
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Operation {
@@ -30,9 +30,9 @@ pub enum Operation {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Qasm {
-    quantum_registers: Vec<QuantumRegister>,
-    classical_registers: Vec<ClassicalRegister>,
-    operations: Vec<Operation>,
+    pub quantum_registers: Vec<QuantumRegister>,
+    pub classical_registers: Vec<ClassicalRegister>,
+    pub operations: Vec<Operation>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -42,7 +42,7 @@ enum Statement {
     Op(Operation),
 }
 
-pub fn from_str(input: &str) -> nom::IResult<&str, Qasm> {
+pub fn from_str<'a>(input: &str) -> nom::IResult<&str, Qasm> {
     program(input)
 }
 
