@@ -5,6 +5,7 @@ authors = ["pandaman64 <kointosudesuyo@infoseek.jp>"]
 
 [dependencies]
 log = "0.4"
+failure = "0.1"
 
 [dependencies.nom]
 version = "4.0"

@@ -2,7 +2,9 @@
 extern crate nom;
 #[macro_use]
 extern crate log;
+extern crate failure;
 
+use nom::types::CompleteStr;
 use std::str::FromStr;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -45,8 +47,14 @@ enum Statement {
     Include(String),
 }
 
-pub fn from_str<'a>(input: &str) -> nom::IResult<&str, Qasm> {
-    program(input)
+pub fn from_str<'a>(input: &'a str) -> Option<(&'a str, Qasm)> {
+    program(CompleteStr(input))
+        .map(|(left, qasm)| (left.0, qasm))
+        .ok()
+}
+
+pub fn double(input: CompleteStr) -> nom::IResult<CompleteStr, f64> {
+  flat_map!(input, call!(nom::recognize_float), parse_to!(f64))
 }
 
 macro_rules! w (
@@ -57,11 +65,11 @@ macro_rules! w (
     )
 );
 
-named!(program<&str, Qasm>,
+named!(program<CompleteStr, Qasm>,
     w!(do_parse!(
-        tag_no_case!("OPENQASM")
-        >> tag_no_case!("2.0")
-        >> tag_no_case!(";")
+        tag_no_case!(&CompleteStr("OPENQASM"))
+        >> tag_no_case!(&CompleteStr("2.0"))
+        >> tag_no_case!(&CompleteStr(";"))
         >> statements: many1!(statement)
         >> (statements.into_iter()
             .fold(Qasm {
@@ -79,7 +87,7 @@ named!(program<&str, Qasm>,
             }))
     ))
 );
-named!(statement<&str, Statement>,
+named!(statement<CompleteStr, Statement>,
     w!(terminated!(
         alt_complete!(
             map!(include, Statement::Include)
@@ -87,108 +95,108 @@ named!(statement<&str, Statement>,
             | map!(creg, Statement::Creg)
             | map!(operation, Statement::Op)
         ),
-        tag_no_case!(";")
+        tag_no_case!(&CompleteStr(";"))
     ))
 );
 
-named!(operation<&str, Operation>,
+named!(operation<CompleteStr, Operation>,
     w!(alt_complete!(
         cx
         | measure
         | unitary
     ))
 );
-named!(unitary<&str, Operation>,
+named!(unitary<CompleteStr, Operation>,
     w!(do_parse!(
         name: ident
         >> params: opt!(complete!(w!(delimited!(
-            tag_no_case!("("),
+            tag_no_case!(&CompleteStr("(")),
             separated_list!(
-                tag_no_case!(","),
-                call!(nom::double_s)
+                tag_no_case!(&CompleteStr(",")),
+                call!(double)
             ),
-            tag_no_case!(")")
+            tag_no_case!(&CompleteStr(")"))
         ))))
         >> q: qubit
         >> (Operation::Unitary(name.to_string(), params.unwrap_or(vec![]), q))
     ))
 );
-named!(cx<&str, Operation>,
+named!(cx<CompleteStr, Operation>,
     w!(do_parse!(
-        tag_no_case!("CX")
+        tag_no_case!(&CompleteStr("CX"))
         >> q1: qubit
-        >> tag_no_case!(",")
+        >> tag_no_case!(&CompleteStr(","))
         >> q2: qubit
         >> (Operation::Cx(q1, q2))
     ))
 );
-named!(measure<&str, Operation>,
+named!(measure<CompleteStr, Operation>,
     w!(do_parse!(
-        tag_no_case!("measure")
+        tag_no_case!(&CompleteStr("measure"))
         >> q: qubit
-        >> tag_no_case!("->")
+        >> tag_no_case!(&CompleteStr("->"))
         >> c: bit
         >> (Operation::Measure(q, c))
     ))
 );
 
-named_args!(register<'a>(t: &'a str)<&'a str, (String, usize)>,
+named_args!(register<'a>(t: &'a str)<CompleteStr<'a>, (String, usize)>,
     w!(do_parse!(
         tag_no_case!(t)
         >> name: ident
-        >> tag_no_case!("[")
-        >> size: map_res!(nom::digit, FromStr::from_str)
-        >> tag_no_case!("]")
+        >> tag_no_case!(&CompleteStr("["))
+        >> size: map_res!(nom::digit, |s: CompleteStr| FromStr::from_str(s.0))
+        >> tag_no_case!(&CompleteStr("]"))
         >> ((name.to_string(), size))
     ))
 );
-named!(qreg<&str, QuantumRegister>, map!(call!(register, "qreg"), |(name, size)| QuantumRegister {
+named!(qreg<CompleteStr, QuantumRegister>, map!(call!(register, "qreg"), |(name, size)| QuantumRegister {
     name,
     size,
 }));
-named!(creg<&str, ClassicalRegister>, map!(call!(register, "creg"), |(name, size)| ClassicalRegister {
+named!(creg<CompleteStr, ClassicalRegister>, map!(call!(register, "creg"), |(name, size)| ClassicalRegister {
     name,
     size,
 }));
 
-named!(include<&str, String>,
+named!(include<CompleteStr, String>,
     w!(do_parse!(
-        tag_no_case!("include")
-        >> filename: delimited!(tag_no_case!("\""), take_until!("\""), tag_no_case!("\""))
+        tag_no_case!(&CompleteStr("include"))
+        >> filename: delimited!(tag_no_case!(&CompleteStr("\"")), take_until!(&CompleteStr("\"")), tag_no_case!(&CompleteStr("\"")))
         >> (filename.to_string())
     ))
 );
 
-named!(operand<&str, (String, usize)>,
+named!(operand<CompleteStr, (String, usize)>,
     w!(do_parse!(
         name: ident
-        >> tag_no_case!("[")
-        >> index: map_res!(nom::digit, FromStr::from_str)
-        >> tag_no_case!("]")
+        >> tag_no_case!(&CompleteStr("["))
+        >> index: map_res!(nom::digit, |s: CompleteStr| FromStr::from_str(s.0))
+        >> tag_no_case!(&CompleteStr("]"))
         >> (name.to_string(), index)
     ))
 );
-named!(qubit<&str, Qubit>, map!(operand, |t| Qubit(t.0, t.1)));
-named!(bit<&str, Bit>, map!(operand, |t| Bit(t.0, t.1)));
+named!(qubit<CompleteStr, Qubit>, map!(operand, |t| Qubit(t.0, t.1)));
+named!(bit<CompleteStr, Bit>, map!(operand, |t| Bit(t.0, t.1)));
 
-named!(comment<&str, &str>,
+named!(comment<CompleteStr, CompleteStr>,
     recognize!(preceded!(
-        tag_no_case!("//"),
+        tag_no_case!(&CompleteStr("//")),
         terminated!(
-            take_until!("\n"),
+            take_until!(&CompleteStr("\n")),
             alt_complete!(eof!() | call!(nom::eol))
         )
     ))
 );
 
-named!(ident<&str, &str>, recognize!(pair!(nom::alpha, nom::alphanumeric0)));
-named!(separator<&str, &str>, alt_complete!(comment | eat_separator!(" \t\r\n")));
+named!(ident<CompleteStr, CompleteStr>, recognize!(pair!(nom::alpha, nom::alphanumeric0)));
+named!(separator<CompleteStr, CompleteStr>, alt_complete!(comment | eat_separator!(" \t\r\n")));
 
 #[test]
 fn test_program() {
     assert_eq!(
         program(
-            r#"
+            CompleteStr(r#"
 
 OPENQASM 2.0;
 include "qelib1.inc";
@@ -201,10 +209,10 @@ U(7, 8, 9) quuu[2] ;
 cx qu[2], q[3];
 X q [ 6];
 measure q [ 1 ] -> c [ 3 ];
-"#
+"#)
         ),
         Ok((
-            "\n",
+            CompleteStr("\n"),
             Qasm {
                 quantum_registers: vec![QuantumRegister {
                     name: "q".to_string(),
@@ -238,9 +246,9 @@ measure q [ 1 ] -> c [ 3 ];
 #[test]
 fn test_operation() {
     assert_eq!(
-        operation("U(1.2, 3, 4.56)q[3]"),
+        operation(CompleteStr("U(1.2, 3, 4.56)q[3]")),
         Ok((
-            "",
+            CompleteStr(""),
             Operation::Unitary(
                 "U".to_string(),
                 vec![1.2, 3.0, 4.56],
@@ -253,9 +261,9 @@ fn test_operation() {
 #[test]
 fn test_statement() {
     assert_eq!(
-        statement("  U(0,1,-1)q[0];"),
+        statement(CompleteStr("  U(0,1,-1)q[0];")),
         Ok((
-            "",
+            CompleteStr(""),
             Statement::Op(Operation::Unitary(
                 "U".to_string(),
                 vec![0.0, 1.0, -1.0,],
@@ -264,9 +272,9 @@ fn test_statement() {
         ))
     );
     assert_eq!(
-        statement("\tU(0,1,-1)q[100];// hoge\n"),
+        statement(CompleteStr("\tU(0,1,-1)q[100];// hoge\n")),
         Ok((
-            "// hoge\n",
+            CompleteStr("// hoge\n"),
             Statement::Op(Operation::Unitary(
                 "U".to_string(),
                 vec![0.0, 1.0, -1.0,],
@@ -275,9 +283,9 @@ fn test_statement() {
         ))
     );
     assert_eq!(
-        statement("\nU(0,1,-1)q[100]  ; // hoge\n"),
+        statement(CompleteStr("\nU(0,1,-1)q[100]  ; // hoge\n")),
         Ok((
-            " // hoge\n",
+            CompleteStr(" // hoge\n"),
             Statement::Op(Operation::Unitary(
                 "U".to_string(),
                 vec![0.0, 1.0, -1.0,],
@@ -289,6 +297,6 @@ fn test_statement() {
 
 #[test]
 fn test_comment() {
-    assert_eq!(comment("// hoge\n"), Ok(("", "// hoge\n")));
-    assert!(comment("hoge").is_err());
+    assert_eq!(comment(CompleteStr("// hoge\n")), Ok((CompleteStr(""), CompleteStr("// hoge\n"))));
+    assert!(comment(CompleteStr("hoge")).is_err());
 }
