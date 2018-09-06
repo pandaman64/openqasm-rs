@@ -54,7 +54,7 @@ pub fn from_str<'a>(input: &'a str) -> Option<(&'a str, Qasm)> {
 }
 
 pub fn double(input: CompleteStr) -> nom::IResult<CompleteStr, f64> {
-  flat_map!(input, call!(nom::recognize_float), parse_to!(f64))
+    flat_map!(input, call!(nom::recognize_float), parse_to!(f64))
 }
 
 macro_rules! w (
@@ -195,8 +195,8 @@ named!(separator<CompleteStr, CompleteStr>, alt_complete!(comment | eat_separato
 #[test]
 fn test_program() {
     assert_eq!(
-        program(
-            CompleteStr(r#"
+        program(CompleteStr(
+            r#"
 
 OPENQASM 2.0;
 include "qelib1.inc";
@@ -209,8 +209,8 @@ U(7, 8, 9) quuu[2] ;
 cx qu[2], q[3];
 X q [ 6];
 measure q [ 1 ] -> c [ 3 ];
-"#)
-        ),
+"#
+        )),
         Ok((
             CompleteStr("\n"),
             Qasm {
@@ -297,6 +297,9 @@ fn test_statement() {
 
 #[test]
 fn test_comment() {
-    assert_eq!(comment(CompleteStr("// hoge\n")), Ok((CompleteStr(""), CompleteStr("// hoge\n"))));
+    assert_eq!(
+        comment(CompleteStr("// hoge\n")),
+        Ok((CompleteStr(""), CompleteStr("// hoge\n")))
+    );
     assert!(comment(CompleteStr("hoge")).is_err());
 }
