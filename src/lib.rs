@@ -30,6 +30,7 @@ pub enum Operation {
     Unitary(String, Vec<f64>, Qubit),
     Cx(Qubit, Qubit),
     Measure(Qubit, Bit),
+    Barrier(Vec<Qubit>),
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -103,6 +104,7 @@ named!(operation<CompleteStr, Operation>,
     w!(alt_complete!(
         cx
         | measure
+        | barrier
         | unitary
     ))
 );
@@ -137,6 +139,13 @@ named!(measure<CompleteStr, Operation>,
         >> tag_no_case!(&CompleteStr("->"))
         >> c: bit
         >> (Operation::Measure(q, c))
+    ))
+);
+named!(barrier<CompleteStr, Operation>,
+    w!(do_parse!(
+        tag_no_case!(&CompleteStr("barrier"))
+        >> qubits: separated_list!(tag_no_case!(&CompleteStr(",")), qubit)
+        >> (Operation::Barrier(qubits))
     ))
 );
 
@@ -183,7 +192,7 @@ named!(comment<CompleteStr, CompleteStr>,
     recognize!(preceded!(
         tag_no_case!(&CompleteStr("//")),
         terminated!(
-            take_until!(&CompleteStr("\n")),
+            take_until_either!(&CompleteStr("\r\n")),
             alt_complete!(eof!() | call!(nom::eol))
         )
     ))
@@ -200,14 +209,15 @@ fn test_program() {
 
 OPENQASM 2.0;
 include "qelib1.inc";
-
+// comment
 qreg q[5] ;
 creg c [4 ]; 
 U(1.2, 3, 4.56) q[3]; 
 u1(3) qqq[3] ;
 U(7, 8, 9) quuu[2] ;
 cx qu[2], q[3];
-X q [ 6];
+X q[6];
+barrier q [1];
 measure q [ 1 ] -> c [ 3 ];
 "#
         )),
@@ -236,6 +246,7 @@ measure q [ 1 ] -> c [ 3 ];
                     ),
                     Operation::Cx(Qubit("qu".to_string(), 2), Qubit("q".to_string(), 3)),
                     Operation::Unitary("X".to_string(), vec![], Qubit("q".to_string(), 6)),
+                    Operation::Barrier(vec![Qubit("q".to_string(), 1)]),
                     Operation::Measure(Qubit("q".to_string(), 1), Bit("c".to_string(), 3)),
                 ],
             }
@@ -254,6 +265,17 @@ fn test_operation() {
                 vec![1.2, 3.0, 4.56],
                 Qubit("q".to_string(), 3)
             )
+        ))
+    );
+    assert_eq!(
+        operation(CompleteStr("\nbarrier q[0], q[2], q[3]\n")),
+        Ok((
+            CompleteStr("\n"),
+            Operation::Barrier(vec![
+                Qubit("q".to_string(), 0),
+                Qubit("q".to_string(), 2),
+                Qubit("q".to_string(), 3),
+            ])
         ))
     );
 }
