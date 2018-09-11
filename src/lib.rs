@@ -3,6 +3,7 @@ extern crate nom;
 extern crate failure;
 
 use nom::types::CompleteStr;
+use std::fmt;
 use std::str::FromStr;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -51,6 +52,66 @@ pub fn from_str<'a>(input: &'a str) -> Option<(&'a str, Qasm)> {
     program(CompleteStr(input))
         .map(|(left, qasm)| (left.0, qasm))
         .ok()
+}
+
+impl fmt::Display for Qasm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "OPENQASM 2.0;")?;
+        for filename in self.includes.iter() {
+            writeln!(f, "include \"{}\";", filename)?;
+        }
+        for qreg in self.quantum_registers.iter() {
+            writeln!(f, "qreg {}[{}];", qreg.name, qreg.size)?;
+        }
+        for creg in self.classical_registers.iter() {
+            writeln!(f, "creg {}[{}];", creg.name, creg.size)?;
+        }
+        for op in self.operations.iter() {
+            use Operation::*;
+            match op {
+                Unitary(name, parameters, target) if parameters.len() > 0 => {
+                    write!(f, "{}(", name)?;
+
+                    let mut first = true;
+                    for p in parameters.iter() {
+                        if !first {
+                            write!(f, ",")?;
+                        }
+                        write!(f, "{}", p)?;
+                        first = false;
+                    }
+
+                    writeln!(f, ") {}[{}];", target.0, target.1)?;
+                }
+                Unitary(name, _, target) => writeln!(f, "{} {}[{}];", name, target.0, target.1)?,
+                Cx(control, target) => writeln!(
+                    f,
+                    "cx {}[{}],{}[{}];",
+                    control.0, control.1, target.0, target.1
+                )?,
+                Measure(qubit, bit) => {
+                    writeln!(f, "measure {}[{}]->{}[{}];", qubit.0, qubit.1, bit.0, bit.1)?
+                }
+                Barrier(qubits) => {
+                    write!(f, "barrier ")?;
+                    let mut first = true;
+                    for q in qubits.iter() {
+                        if !first {
+                            write!(f, ",")?;
+                        }
+                        write!(f, "{}[{}]", q.0, q.1)?;
+                        first = false;
+                    }
+                    writeln!(f, ";")?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+pub fn to_string(qasm: Qasm) -> String {
+    qasm.to_string()
 }
 
 pub fn double(input: CompleteStr) -> nom::IResult<CompleteStr, f64> {
@@ -255,6 +316,36 @@ measure q [ 1 ] -> c [ 3 ];
     );
 }
 
+#[test]
+fn test_str() {
+    let input = r#"
+OPENQASM 2.0;
+include "qelib1.inc";
+// comment
+qreg q[5] ;
+creg c [4 ]; 
+U(1.2, 3, 4.56) q[3]; 
+u1(3) qqq[3] ;
+U(7, 8, 9) quuu[2] ;
+cx qu[2], q[3];
+X q[6];
+barrier q [1];
+measure q [ 1 ] -> c [ 3 ];
+"#;
+    let output = r#"OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[5];
+creg c[4];
+U(1.2,3,4.56) q[3];
+u1(3) qqq[3];
+U(7,8,9) quuu[2];
+cx qu[2],q[3];
+X q[6];
+barrier q[1];
+measure q[1]->c[3];
+"#;
+    assert_eq!(to_string(from_str(input).unwrap().1), output,);
+}
 #[test]
 fn test_operation() {
     assert_eq!(
