@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate nom;
-#[macro_use]
-extern crate log;
 extern crate failure;
 
 use nom::types::CompleteStr;
@@ -38,6 +36,7 @@ pub struct Qasm {
     pub quantum_registers: Vec<QuantumRegister>,
     pub classical_registers: Vec<ClassicalRegister>,
     pub operations: Vec<Operation>,
+    pub includes: Vec<String>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -77,12 +76,13 @@ named!(program<CompleteStr, Qasm>,
                 quantum_registers: vec![],
                 classical_registers: vec![],
                 operations: vec![],
+                includes: vec![],
             }, |mut qasm, statement| {
                 match statement {
                     Statement::Qreg(qreg) => qasm.quantum_registers.push(qreg),
                     Statement::Creg(creg) => qasm.classical_registers.push(creg),
                     Statement::Op(op) => qasm.operations.push(op),
-                    Statement::Include(_) => debug!("currently ignoring include"),
+                    Statement::Include(filename) => qasm.includes.push(filename),
                 }
                 qasm
             }))
@@ -249,6 +249,7 @@ measure q [ 1 ] -> c [ 3 ];
                     Operation::Barrier(vec![Qubit("q".to_string(), 1)]),
                     Operation::Measure(Qubit("q".to_string(), 1), Bit("c".to_string(), 3)),
                 ],
+                includes: vec!["qelib1.inc".to_string(),],
             }
         ))
     );
