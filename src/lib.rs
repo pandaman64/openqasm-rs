@@ -178,7 +178,7 @@ named!(unitary<CompleteStr, Operation>,
             tag_no_case!(&CompleteStr("(")),
             separated_list!(
                 tag_no_case!(&CompleteStr(",")),
-                call!(double)
+                parameter
             ),
             tag_no_case!(&CompleteStr(")"))
         ))))
@@ -209,6 +209,49 @@ named!(barrier<CompleteStr, Operation>,
         tag_no_case!(&CompleteStr("barrier"))
         >> qubits: separated_list!(tag_no_case!(&CompleteStr(",")), qubit)
         >> (Operation::Barrier(qubits))
+    ))
+);
+
+named!(parameter<CompleteStr, f64>,
+    call!(term)
+);
+named!(term<CompleteStr, f64>,
+    w!(do_parse!(
+        lhs: factor
+        >> rhs: opt!(pair!(one_of!("+-"), term))
+        >> (match rhs {
+            Some(('+', rhs)) => lhs + rhs,
+            Some(('-', rhs)) => lhs - rhs,
+            None => lhs,
+            _ => unreachable!(),
+        })
+    ))
+);
+named!(factor<CompleteStr, f64>,
+    w!(do_parse!(
+        lhs: primary
+        >> rhs: opt!(pair!(one_of!("*/"), factor))
+        >> (match rhs {
+            Some(('*', rhs)) => lhs * rhs,
+            Some(('/', rhs)) => lhs / rhs,
+            None => lhs,
+            _ => unreachable!(),
+        })
+    ))
+);
+
+named!(primary<CompleteStr, f64>,
+    w!(alt_complete!(
+        paren
+        | value!(std::f64::consts::PI, tag_no_case!("pi"))
+        | call!(double)
+    ))
+);
+named!(paren<CompleteStr, f64>,
+    w!(delimited!(
+        tag_no_case!("("),
+        parameter,
+        tag_no_case!(")")
     ))
 );
 
@@ -263,6 +306,15 @@ named!(comment<CompleteStr, CompleteStr>,
 
 named!(ident<CompleteStr, CompleteStr>, recognize!(pair!(nom::alpha, nom::alphanumeric0)));
 named!(separator<CompleteStr, CompleteStr>, alt_complete!(comment | eat_separator!(" \t\r\n")));
+
+#[test]
+fn test_parameter() {
+    use std::f64::consts::PI;
+    assert_eq!(
+        parameter(CompleteStr("((pi + 1) / pi - 1)")),
+        Ok((CompleteStr(""), (PI + 1.0) / PI - 1.0)),
+    );
+}
 
 #[test]
 fn test_program() {
