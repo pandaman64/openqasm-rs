@@ -49,7 +49,7 @@ enum Statement {
     Include(String),
 }
 
-pub fn from_str<'a>(input: &'a str) -> Option<(&'a str, Qasm)> {
+pub fn from_str(input: &str) -> Option<(&str, Qasm)> {
     program(CompleteStr(input))
         .map(|(left, qasm)| (left.0, qasm))
         .ok()
@@ -70,7 +70,7 @@ impl fmt::Display for Qasm {
         for op in self.operations.iter() {
             use Operation::*;
             match op {
-                Unitary(name, parameters, target) if parameters.len() > 0 => {
+                Unitary(name, parameters, target) if !parameters.is_empty() => {
                     write!(f, "{}(", name)?;
 
                     let mut first = true;
@@ -112,7 +112,7 @@ impl fmt::Display for Qasm {
     }
 }
 
-pub fn to_string(qasm: Qasm) -> String {
+pub fn to_string(qasm: &Qasm) -> String {
     qasm.to_string()
 }
 
@@ -183,7 +183,7 @@ named!(unitary<CompleteStr, Operation>,
             tag_no_case!(&CompleteStr(")"))
         ))))
         >> q: qubit
-        >> (Operation::Unitary(name.to_string(), params.unwrap_or(vec![]), q))
+        >> (Operation::Unitary(name.to_string(), params.unwrap_or_else(|| vec![]), q))
     ))
 );
 named!(cx<CompleteStr, Operation>,
@@ -262,7 +262,7 @@ named_args!(register<'a>(t: &'a str)<CompleteStr<'a>, (String, usize)>,
         >> tag_no_case!(&CompleteStr("["))
         >> size: map_res!(nom::digit, |s: CompleteStr| FromStr::from_str(s.0))
         >> tag_no_case!(&CompleteStr("]"))
-        >> ((name.to_string(), size))
+        >> (name.to_string(), size)
     ))
 );
 named!(qreg<CompleteStr, QuantumRegister>, map!(call!(register, "qreg"), |(name, size)| QuantumRegister {
@@ -398,7 +398,7 @@ X q[6];
 barrier q[1];
 measure q[1]->c[3];
 "#;
-    assert_eq!(to_string(from_str(input).unwrap().1), output,);
+    assert_eq!(to_string(&from_str(input).unwrap().1), output);
 }
 #[test]
 fn test_operation() {
