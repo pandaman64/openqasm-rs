@@ -66,6 +66,8 @@ impl std::fmt::Display for Error {
     }
 }
 
+impl std::error::Error for Error {}
+
 type Result<'a> = std::result::Result<(&'a str, Qasm), Error>;
 
 pub fn from_str(input: &str) -> Result {
