@@ -49,10 +49,54 @@ enum Statement {
     Include(String),
 }
 
-pub fn from_str(input: &str) -> Option<(&str, Qasm)> {
+#[derive(Clone, Debug)]
+pub struct Error {
+    row: usize,
+    column: usize,
+    source: String,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "parse error at {}:{}, message: {}",
+            self.row, self.column, self.source
+        )
+    }
+}
+
+type Result<'a> = std::result::Result<(&'a str, Qasm), Error>;
+
+pub fn from_str(input: &str) -> Result {
+    use nom::Context::*;
+    use nom::Err::*;
+
     program(CompleteStr(input))
         .map(|(left, qasm)| (left.0, qasm))
-        .ok()
+        .map_err(|e| match e {
+            Error(Code(s, kind)) | Failure(Code(s, kind)) => {
+                let (parsed, _) = input.split_at(input.len() - s.len());
+                let lines = parsed.lines();
+
+                let mut row = 0;
+                let mut last_line = None;
+                for line in lines {
+                    row += 1;
+                    last_line = Some(line);
+                }
+
+                let column = last_line.map(|line| line.chars().count()).unwrap_or(0);
+                let source = format!("{:?}", kind);
+
+                self::Error {
+                    row,
+                    column,
+                    source,
+                }
+            }
+            Incomplete(_) => unreachable!(),
+        })
 }
 
 impl fmt::Display for Qasm {
