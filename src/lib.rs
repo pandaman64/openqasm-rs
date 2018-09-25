@@ -289,6 +289,7 @@ named!(factor<CompleteStr, f64>,
 named!(primary<CompleteStr, f64>,
     w!(alt_complete!(
         paren
+        | neg
         | value!(std::f64::consts::PI, tag_no_case!("pi"))
         | call!(double)
     ))
@@ -298,6 +299,13 @@ named!(paren<CompleteStr, f64>,
         tag_no_case!("("),
         parameter,
         tag_no_case!(")")
+    ))
+);
+named!(neg<CompleteStr, f64>,
+    w!(do_parse!(
+        tag_no_case!("-")
+        >> value: call!(primary)
+        >> (-value)
     ))
 );
 
@@ -357,8 +365,12 @@ named!(separator<CompleteStr, CompleteStr>, alt_complete!(comment | eat_separato
 fn test_parameter() {
     use std::f64::consts::PI;
     assert_eq!(
-        parameter(CompleteStr("((pi + 1) / pi - 1)")),
-        Ok((CompleteStr(""), (PI + 1.0) / PI - 1.0)),
+        parameter(CompleteStr("(-(pi + 1) / pi - 1)")),
+        Ok((CompleteStr(""), -(PI + 1.0) / PI - 1.0)),
+    );
+    assert_eq!(
+        parameter(CompleteStr("(-(pi + 1) / pi - -1)")),
+        Ok((CompleteStr(""), -(PI + 1.0) / PI - -1.0)),
     );
 }
 
