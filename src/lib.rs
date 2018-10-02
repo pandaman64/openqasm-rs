@@ -151,7 +151,7 @@ impl fmt::Display for Qasm {
                     }
                     writeln!(f, ";")?;
                 }
-                Swap(lhs, rhs) => writeln!(f, "swap {}[{}],{}[{}]", lhs.0, lhs.1, rhs.0, rhs.1)?,
+                Swap(lhs, rhs) => writeln!(f, "swap {}[{}],{}[{}];", lhs.0, lhs.1, rhs.0, rhs.1)?,
             }
         }
         Ok(())
