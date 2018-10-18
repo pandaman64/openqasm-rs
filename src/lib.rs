@@ -68,14 +68,17 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-type Result<'a> = std::result::Result<(&'a str, Qasm), Error>;
+type Result<'a> = std::result::Result<Qasm, Error>;
 
 pub fn from_str(input: &str) -> Result {
     use nom::Context::*;
     use nom::Err::*;
 
     program(CompleteStr(input))
-        .map(|(left, qasm)| (left.0, qasm))
+        .map(|(left, qasm)| {
+            assert_eq!(left.0, "");
+            qasm
+        })
         .map_err(|e| match e {
             Error(Code(s, kind)) | Failure(Code(s, kind)) => {
                 let (parsed, _) = input.split_at(input.len() - s.len());
@@ -180,6 +183,7 @@ named!(program<CompleteStr, Qasm>,
         >> tag_no_case!(&CompleteStr("2.0"))
         >> tag_no_case!(&CompleteStr(";"))
         >> statements: many1!(statement)
+        >> eof!()
         >> (statements.into_iter()
             .fold(Qasm {
                 quantum_registers: vec![],
@@ -395,7 +399,7 @@ measure q [ 1 ] -> c [ 3 ];
 "#
         )),
         Ok((
-            CompleteStr("\n"),
+            CompleteStr(""),
             Qasm {
                 quantum_registers: vec![QuantumRegister {
                     name: "q".to_string(),
@@ -456,7 +460,7 @@ X q[6];
 barrier q[1];
 measure q[1]->c[3];
 "#;
-    assert_eq!(to_string(&from_str(input).unwrap().1), output);
+    assert_eq!(to_string(&from_str(input).unwrap()), output);
 }
 #[test]
 fn test_operation() {
