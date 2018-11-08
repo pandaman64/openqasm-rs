@@ -30,7 +30,6 @@ pub enum Operation {
     Cx(Qubit, Qubit),
     Measure(Qubit, Bit),
     Barrier(Vec<Qubit>),
-    Swap(Qubit, Qubit),
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -154,7 +153,6 @@ impl fmt::Display for Qasm {
                     }
                     writeln!(f, ";")?;
                 }
-                Swap(lhs, rhs) => writeln!(f, "swap {}[{}],{}[{}];", lhs.0, lhs.1, rhs.0, rhs.1)?,
             }
         }
         Ok(())
